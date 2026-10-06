@@ -3,7 +3,27 @@ import { confirmSubscription, NewsletterError, subscribe, unsubscribe } from '..
 
 export type NewsletterPages = { confirmed: string; unsubscribed: string; invalid: string };
 const DEFAULT_PAGES: NewsletterPages = { confirmed: '/newsletter/confirmed', unsubscribed: '/newsletter/unsubscribed', invalid: '/newsletter/invalid' };
+/** Vuelve a la página con `?newsletter=pending|<error>#newsletter` (el formulario muestra el aviso). */
+function backWith(back: URL, result: string): Response {
+  back.searchParams.set('newsletter', result);
+  back.hash = 'newsletter';
+  return new Response(null, { status: 303, headers: { location: back.toString() } });
+}
+
 const redirect = (to: string) => new Response(null, { status: 303, headers: { location: to } });
+
+/** Envío HTML clásico (sin JavaScript) desde una página del mismo sitio: URL a la que volver, o null. */
+function backUrl(req: Request, isJson: boolean): URL | null {
+  if (isJson || !(req.headers.get('accept') ?? '').includes('text/html')) return null;
+  const ref = req.headers.get('referer');
+  if (!ref) return null;
+  try {
+    const u = new URL(ref);
+    return u.host === new URL(req.url).host ? u : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function handleSubscribe(req: Request, opts: { tags?: string[]; source?: string } = {}): Promise<Response> {
   const isJson = (req.headers.get('content-type') ?? '').includes('application/json');
@@ -16,9 +36,14 @@ export async function handleSubscribe(req: Request, opts: { tags?: string[]; sou
       { headers: req.headers, fields },
     );
     // Misma respuesta para altas nuevas y existentes.
+    const back = backUrl(req, isJson);
+    if (back) return backWith(back, 'pending');
     return Response.json({ ok: true }, { status: 202 });
   } catch (e) {
-    if (e instanceof NewsletterError) return Response.json({ error: e.code }, { status: e.code === 'rate_limited' ? 429 : 400 });
+    if (e instanceof NewsletterError) {
+      const back = backUrl(req, isJson);
+      return back ? backWith(back, e.code) : Response.json({ error: e.code }, { status: e.code === 'rate_limited' ? 429 : 400 });
+    }
     throw e;
   }
 }

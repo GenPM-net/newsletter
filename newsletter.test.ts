@@ -175,5 +175,11 @@ describe('sender and routes', () => {
     expect(one.status).toBe(200);
     expect((await db.select().from(subscribers))[0]!.status).toBe('unsubscribed');
     expect((await app.request('/newsletter/unsubscribe?token=bad')).headers.get('location')).toBe('/newsletter/invalid');
+    // Formulario HTML sin JavaScript: 303 de vuelta a la página con el resultado.
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({ ...fields, email: 'html@site.test' })) fd.set(k, String(v));
+    const html = await app.request('http://site.test/newsletter/subscribe', { method: 'POST', body: fd, headers: { accept: 'text/html', referer: 'http://site.test/blog/x', 'x-forwarded-for': '192.0.2.201' } });
+    expect(html.status).toBe(303);
+    expect(html.headers.get('location')).toBe('http://site.test/blog/x?newsletter=pending#newsletter');
   });
 });
