@@ -1,10 +1,10 @@
 // Panel: suscriptores (lista, etiquetas, borrado) y campañas (editar borradores, enviar, programar, cancelar).
 import { and, count, desc, eq, ilike, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import type { AdminContext, AdminResource } from '../contracts/index.js';
-import { getDb } from '../db/index.js';
-import { cancelCampaign, createCampaign, NewsletterError, sendCampaign, updateCampaign } from './newsletter.js';
-import { type Campaign, campaigns, type Subscriber, subscribers } from './schema.js';
+import type { AdminContext, AdminResource } from '../contracts/index.ts';
+import { getDb } from '../db/index.ts';
+import { cancelCampaign, createCampaign, NewsletterError, sendCampaign, updateCampaign } from './newsletter.ts';
+import { type Campaign, campaigns, type Subscriber, subscribers } from './schema.ts';
 
 async function need(ctx: AdminContext, perm: string) {
   if (!(await ctx.can(perm))) throw new NewsletterError('forbidden', `forbidden: ${perm}`);

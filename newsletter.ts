@@ -1,13 +1,13 @@
 // Altas con doble opt-in, bajas en un clic y campañas enviadas por lotes reanudables con @core/jobs.
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { verifyHuman } from '../antispam/index.js';
-import { type Executor, getDb } from '../db/index.js';
-import { defineJob } from '../jobs/index.js';
-import { type Doc, toHtml, toPlainText } from '../rich-text/index.js';
-import { type Campaign, campaignSends, campaigns, type Subscriber, subscribers } from './schema.js';
-import { getNewsletterSender } from './sender.js';
-import { makeToken, readToken } from './tokens.js';
+import { verifyHuman } from '../antispam/index.ts';
+import { type Executor, getDb } from '../db/index.ts';
+import { defineJob } from '../jobs/index.ts';
+import { type Doc, toHtml, toPlainText } from '../rich-text/index.ts';
+import { type Campaign, campaignSends, campaigns, type Subscriber, subscribers } from './schema.ts';
+import { getNewsletterSender } from './sender.ts';
+import { makeToken, readToken } from './tokens.ts';
 
 export class NewsletterError extends Error {
   constructor(

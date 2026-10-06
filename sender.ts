@@ -1,7 +1,7 @@
 // Envío con cabeceras de baja en un clic (RFC 8058, exigidas por Gmail y Yahoo a remitentes masivos).
 // Con RESEND_API_KEY usa la API de Resend directamente (admite cabeceras); si no, el proveedor de @core/email
 // (sin cabeceras: solo para desarrollo).
-import { getEmailProvider } from '../email/index.js';
+import { getEmailProvider } from '../email/index.ts';
 
 export type NewsletterMessage = { from: string; to: string; subject: string; html: string; text: string; headers: Record<string, string> };
 

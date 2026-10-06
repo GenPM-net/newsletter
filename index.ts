@@ -1,5 +1,5 @@
 // @core/newsletter — API pública. Importa desde aquí; rutas públicas en adapters/hono.ts y adapters/next.ts.
-export { campaignsAdminResource, newsletterAdminResources, subscribersAdminResource } from './admin.js';
+export { campaignsAdminResource, newsletterAdminResources, subscribersAdminResource } from './admin.ts';
 export {
   BATCH_SIZE,
   cancelCampaign,
@@ -20,8 +20,8 @@ export {
   unsubscribe,
   unsubscribeUrl,
   updateCampaign,
-} from './newsletter.js';
-export { type Campaign, campaignSends, campaigns, type Subscriber, subscribers } from './schema.js';
+} from './newsletter.ts';
+export { type Campaign, campaignSends, campaigns, type Subscriber, subscribers } from './schema.ts';
 export {
   emailProviderSender,
   getNewsletterSender,
@@ -29,4 +29,4 @@ export {
   type NewsletterSender,
   resendSender,
   setNewsletterSender,
-} from './sender.js';
+} from './sender.ts';

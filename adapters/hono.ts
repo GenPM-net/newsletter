@@ -1,6 +1,6 @@
 // Adaptador Hono: `app.route('/newsletter', newsletterRoutes())`.
 import { Hono } from 'hono';
-import { handleConfirm, handleSubscribe, handleUnsubscribe, type NewsletterPages } from './http.js';
+import { handleConfirm, handleSubscribe, handleUnsubscribe, type NewsletterPages } from './http.ts';
 
 export function newsletterRoutes(opts: { pages?: Partial<NewsletterPages>; tags?: string[] } = {}) {
   return new Hono()

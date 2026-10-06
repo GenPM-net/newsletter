@@ -1,5 +1,5 @@
 // Rutas públicas: POST /subscribe, GET /confirm?token=, GET y POST /unsubscribe?token= (POST = baja en un clic).
-import { confirmSubscription, NewsletterError, subscribe, unsubscribe } from '../index.js';
+import { confirmSubscription, NewsletterError, subscribe, unsubscribe } from '../index.ts';
 
 export type NewsletterPages = { confirmed: string; unsubscribed: string; invalid: string };
 const DEFAULT_PAGES: NewsletterPages = { confirmed: '/newsletter/confirmed', unsubscribed: '/newsletter/unsubscribed', invalid: '/newsletter/invalid' };

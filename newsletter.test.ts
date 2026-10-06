@@ -1,17 +1,17 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { formTimingToken } from '../antispam/index.js';
-import * as antispamSchema from '../antispam/schema.js';
-import type { AdminContext } from '../contracts/index.js';
-import { testDb } from '../db/__fixtures__/pglite.js';
-import type { Db } from '../db/index.js';
-import { runDue } from '../jobs/index.js';
-import * as jobsSchema from '../jobs/schema.js';
-import { docFromText } from '../rich-text/index.js';
-import { newsletterRoutes } from './adapters/hono.js';
-import { unsubscribeRoute } from './adapters/next.js';
-import * as schema from './schema.js';
+import { formTimingToken } from '../antispam/index.ts';
+import * as antispamSchema from '../antispam/schema.ts';
+import type { AdminContext } from '../contracts/index.ts';
+import { testDb } from '../db/__fixtures__/pglite.ts';
+import type { Db } from '../db/index.ts';
+import { runDue } from '../jobs/index.ts';
+import * as jobsSchema from '../jobs/schema.ts';
+import { docFromText } from '../rich-text/index.ts';
+import { newsletterRoutes } from './adapters/hono.ts';
+import { unsubscribeRoute } from './adapters/next.ts';
+import * as schema from './schema.ts';
 import {
   BATCH_SIZE,
   campaignSends,
@@ -33,7 +33,7 @@ import {
   subscribers,
   unsubscribe,
   unsubscribeUrl,
-} from './index.js';
+} from './index.ts';
 
 let db: Db;
 const sent: NewsletterMessage[] = [];

@@ -1,7 +1,7 @@
 // Tablas de @core/newsletter. Las recoge drizzle-kit vía src/lib/db/drizzle.config.ts.
 import { index, integer, jsonb, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
-import { primaryId, timestamps } from '../db/index.js';
-import type { Doc } from '../rich-text/index.js';
+import { primaryId, timestamps } from '../db/index.ts';
+import type { Doc } from '../rich-text/index.ts';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
