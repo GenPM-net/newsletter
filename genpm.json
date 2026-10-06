@@ -1,0 +1,41 @@
+{
+  "$": 1,
+  "n": "@core/newsletter",
+  "v": "1.0.0",
+  "s": {
+    "en": "Newsletter: double opt-in, one-click unsubscribe (RFC 8058), tags, rich-text campaigns sent in resumable batches",
+    "es": "Newsletter: doble opt-in, baja en un clic (RFC 8058), etiquetas y campañas con texto enriquecido en lotes reanudables",
+    "pt-BR": "Newsletter: double opt-in, descadastro em um clique (RFC 8058), tags e campanhas em lotes retomáveis",
+    "fr": "Newsletter : double opt-in, désinscription en un clic (RFC 8058), tags et campagnes envoyées par lots reprenables",
+    "de": "Newsletter: Double-Opt-in, Abmeldung mit einem Klick (RFC 8058), Tags und Kampagnen in fortsetzbaren Stapeln",
+    "ja": "ニュースレター：ダブルオプトイン、ワンクリック配信停止（RFC 8058）、タグ、再開可能なバッチ配信",
+    "zh-CN": "邮件订阅：双重确认、一键退订（RFC 8058）、标签以及可续发的批量群发",
+    "ko": "뉴스레터: 더블 옵트인, 원클릭 구독 해지(RFC 8058), 태그, 재개 가능한 일괄 캠페인 발송"
+  },
+  "d": "src/lib/newsletter",
+  "l": "MIT",
+  "k": [
+    "newsletter",
+    "email-marketing",
+    "double-opt-in",
+    "gdpr",
+    "campaigns"
+  ],
+  "g": {
+    "@core/db": "^1.0.0",
+    "@core/antispam": "^1.0.0",
+    "@core/email": "^1.0.1",
+    "@core/jobs": "^1.0.0",
+    "@core/rich-text": "^1.0.0",
+    "@core/contracts": "^1.0.0"
+  },
+  "p": {
+    "zod": "^4.0.0"
+  },
+  "e": [
+    "NEWSLETTER_FROM",
+    "NEWSLETTER_POSTAL_ADDRESS",
+    "NEWSLETTER_SECRET",
+    "SITE_URL"
+  ]
+}
