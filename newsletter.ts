@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { verifyHuman } from '../antispam/index.ts';
 import { type Executor, getDb } from '../db/index.ts';
-import { defineJob } from '../jobs/index.ts';
+import { defineJob, jobs } from '../jobs/index.ts';
 import { type Doc, toHtml, toPlainText } from '../rich-text/index.ts';
 import { type Campaign, campaignSends, campaigns, type Subscriber, subscribers } from './schema.ts';
 import { getNewsletterSender } from './sender.ts';
@@ -179,7 +179,11 @@ export async function sendCampaign(id: string, at?: Date, db: Executor = getDb()
     .where(and(eq(campaigns.id, id), inArray(campaigns.status, ['draft', 'scheduled'])))
     .returning();
   if (!row) throw new NewsletterError('invalid_state', 'campaign is not a draft');
-  await sendBatchJob.enqueue({ campaignId: id }, { runAt: at, dedupeKey: `newsletter.batch:${id}` }, db);
+  const dedupeKey = `newsletter.batch:${id}`;
+  // Si ya estaba programada, la tarea pendiente tiene la misma clave y ganaría con su fecha antigua: se mueve a la nueva
+  // (ahora, con "Enviar ya").
+  await db.update(jobs).set({ runAt: at ?? new Date() }).where(and(eq(jobs.dedupeKey, dedupeKey), eq(jobs.status, 'queued')));
+  await sendBatchJob.enqueue({ campaignId: id }, { runAt: at, dedupeKey }, db);
   return row;
 }
 
@@ -188,30 +192,48 @@ export async function cancelCampaign(id: string, db: Executor = getDb()): Promis
 }
 
 export const BATCH_SIZE = 100;
+/** Una reserva `sending` más vieja que esto es de un lote que murió (el job dura como mucho 10 min): se reintenta. */
+export const STALE_CLAIM_MS = 15 * 60_000;
 
-/** Lote: prepara destinatarios la primera vez, envía hasta BATCH_SIZE y se reencola si quedan. */
+/**
+ * Lote: prepara destinatarios la primera vez, reserva hasta BATCH_SIZE de forma atómica (dos lotes a la vez nunca toman
+ * el mismo destinatario), envía y se reencola si quedan. El siguiente lote usa una clave estable (`…:<n>`): si dos
+ * lotes del mismo turno acaban a la vez, solo se encola uno.
+ */
 export const sendBatchJob = defineJob(
   'newsletter.send-batch',
-  z.object({ campaignId: z.string() }),
-  async ({ campaignId }, { signal }) => {
+  z.object({ campaignId: z.string(), seq: z.number().int().min(0).optional() }),
+  async ({ campaignId, seq = 0 }, { signal }) => {
     const db = getDb();
     const [c] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId));
     if (!c || c.status === 'cancelled' || c.status === 'sent' || c.status === 'draft') return;
-    if (c.status === 'scheduled') await db.update(campaigns).set({ status: 'sending' }).where(eq(campaigns.id, campaignId));
+    if (c.status === 'scheduled') await db.update(campaigns).set({ status: 'sending' }).where(and(eq(campaigns.id, campaignId), eq(campaigns.status, 'scheduled')));
     // Destinatarios: activos (con alguna de las etiquetas, si hay). INSERT … SELECT idempotente.
     const tagFilter = c.tags.length ? sql` and s.tags ?| ${sql.raw(`array[${c.tags.map((t) => `'${t.replace(/[^a-z0-9-]/g, '')}'`).join(',')}]`)}` : sql``;
     await db.execute(
       sql`insert into newsletter_sends (campaign_id, subscriber_id) select ${campaignId}, s.id from subscribers s where s.status = 'active'${tagFilter} on conflict do nothing`,
     );
-    const batch = await db
-      .select({ subscriberId: campaignSends.subscriberId, email: subscribers.email, locale: subscribers.locale, status: subscribers.status })
-      .from(campaignSends)
-      .innerJoin(subscribers, eq(subscribers.id, campaignSends.subscriberId))
-      .where(and(eq(campaignSends.campaignId, campaignId), eq(campaignSends.status, 'queued')))
-      .limit(BATCH_SIZE);
+    const stale = new Date(Date.now() - STALE_CLAIM_MS);
+    const claimed = await db
+      .update(campaignSends)
+      .set({ status: 'sending', claimedAt: new Date() })
+      .where(
+        and(
+          eq(campaignSends.campaignId, campaignId),
+          sql`${campaignSends.subscriberId} in (select subscriber_id from newsletter_sends where campaign_id = ${campaignId} and (status = 'queued' or (status = 'sending' and claimed_at < ${stale})) limit ${BATCH_SIZE} for update skip locked)`,
+        ),
+      )
+      .returning({ subscriberId: campaignSends.subscriberId });
+    const batch = claimed.length
+      ? await db
+          .select({ subscriberId: subscribers.id, email: subscribers.email, locale: subscribers.locale, status: subscribers.status })
+          .from(subscribers)
+          .where(inArray(subscribers.id, claimed.map((r) => r.subscriberId)))
+      : [];
     const from = env('NEWSLETTER_FROM');
     let sent = 0;
     let failed = 0;
+    const done = new Set<string>();
     for (const r of batch) {
       if (signal.aborted) break;
       let status: 'sent' | 'failed' = 'sent';
@@ -229,21 +251,38 @@ export const sendBatchJob = defineJob(
         }
       }
       status === 'sent' ? sent++ : failed++;
+      done.add(r.subscriberId);
       await db
         .update(campaignSends)
         .set({ status, error, sentAt: status === 'sent' ? new Date() : null })
         .where(and(eq(campaignSends.campaignId, campaignId), eq(campaignSends.subscriberId, r.subscriberId)));
     }
-    await db
-      .update(campaigns)
-      .set({ sentCount: sql`${campaigns.sentCount} + ${sent}`, failedCount: sql`${campaigns.failedCount} + ${failed}` })
-      .where(eq(campaigns.id, campaignId));
-    const [left] = await db
-      .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    // Reservas que no se llegaron a enviar (tarea abortada): vuelven a la cola.
+    const undone = claimed.map((r) => r.subscriberId).filter((id) => !done.has(id));
+    if (undone.length)
+      await db
+        .update(campaignSends)
+        .set({ status: 'queued', claimedAt: null })
+        .where(and(eq(campaignSends.campaignId, campaignId), eq(campaignSends.status, 'sending'), inArray(campaignSends.subscriberId, undone)));
+    if (sent || failed)
+      await db
+        .update(campaigns)
+        .set({ sentCount: sql`${campaigns.sentCount} + ${sent}`, failedCount: sql`${campaigns.failedCount} + ${failed}` })
+        .where(eq(campaigns.id, campaignId));
+    const left = await db
+      .select({ status: campaignSends.status, n: sql<number>`count(*)`.mapWith(Number) })
       .from(campaignSends)
-      .where(and(eq(campaignSends.campaignId, campaignId), eq(campaignSends.status, 'queued')));
-    if ((left?.n ?? 0) > 0) await sendBatchJob.enqueue({ campaignId }, { dedupeKey: `newsletter.batch:${campaignId}:${Date.now()}` });
-    else await db.update(campaigns).set({ status: 'sent', sentAt: new Date() }).where(eq(campaigns.id, campaignId));
+      .where(and(eq(campaignSends.campaignId, campaignId), inArray(campaignSends.status, ['queued', 'sending'])))
+      .groupBy(campaignSends.status);
+    const queued = left.find((l) => l.status === 'queued')?.n ?? 0;
+    const sending = left.find((l) => l.status === 'sending')?.n ?? 0;
+    const next = { campaignId, seq: seq + 1 };
+    const dedupeKey = `newsletter.batch:${campaignId}:${seq + 1}`;
+    if (queued > 0) await sendBatchJob.enqueue(next, { dedupeKey });
+    // Solo quedan reservas de otro lote en curso: él terminará; por si murió, se vuelve a mirar cuando caduquen.
+    else if (sending > 0) await sendBatchJob.enqueue(next, { dedupeKey, runAt: new Date(Date.now() + STALE_CLAIM_MS) });
+    // `where status = 'sending'`: no pisa una campaña cancelada mientras tanto.
+    else await db.update(campaigns).set({ status: 'sent', sentAt: new Date() }).where(and(eq(campaigns.id, campaignId), eq(campaigns.status, 'sending')));
   },
   { timeoutMs: 10 * 60_000, maxAttempts: 10 },
 );

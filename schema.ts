@@ -55,9 +55,12 @@ export const campaignSends = pgTable(
     subscriberId: text('subscriber_id')
       .notNull()
       .references(() => subscribers.id, { onDelete: 'cascade' }),
-    status: text('status', { enum: ['queued', 'sent', 'failed'] })
+    /** `sending`: reservado por un lote (UPDATE … SKIP LOCKED), para que dos lotes a la vez no envíen dos veces. */
+    status: text('status', { enum: ['queued', 'sending', 'sent', 'failed'] })
       .notNull()
       .default('queued'),
+    /** Cuándo lo reservó el lote; si el proceso murió, se libera pasado `STALE_CLAIM_MS`. */
+    claimedAt: ts('claimed_at'),
     error: text('error'),
     sentAt: ts('sent_at'),
   },

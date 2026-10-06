@@ -17,7 +17,10 @@ Tables: `subscribers`, `newsletter_campaigns`, `newsletter_sends`. No open-track
    Verify the sending domain (SPF, DKIM, DMARC) with the provider — tell the user how; you can't do it for them.
 2. Migrations as in `src/lib/db/AGENTS.md`; the @core/jobs cron must run.
 3. Routes under `/newsletter` (Hono `app.route('/newsletter', newsletterRoutes())`, or the Next handlers) and three
-   simple pages: `/newsletter/confirmed`, `/newsletter/unsubscribed`, `/newsletter/invalid`.
+   simple pages: `/newsletter/confirmed`, `/newsletter/unsubscribed`, `/newsletter/invalid`. `confirm` and `unsubscribe`
+   need GET and POST: GET only renders a minimal page with a button (mail link scanners open every URL), the button
+   POSTs and acts; any other POST to `unsubscribe` is the RFC 8058 one-click (200, no redirect). Translate the page
+   with `texts` (`newsletterRoutes({ texts })` or the handlers' third argument).
 4. Sign-up form: `POST /newsletter/subscribe` with `email`, the @core/antispam fields and an unchecked consent checkbox
    whose text version goes in `consentVersion`. Always show the same "check your inbox" message.
 5. Translate system emails with `setNewsletterMessages((locale) => ({ confirmSubject, confirmText, unsubscribeLabel }))`.
@@ -26,6 +29,8 @@ Tables: `subscribers`, `newsletter_campaigns`, `newsletter_sends`. No open-track
 
 ## Conventions
 - Only `active` (confirmed) subscribers receive campaigns; tags segment them.
+- Batches claim recipients atomically (`newsletter_sends.status = 'sending'`, `FOR UPDATE SKIP LOCKED`), so concurrent
+  batch jobs never mail the same subscriber twice; claims older than 15 min (a dead worker) are retried.
 - Permissions: `subscribers:read|update|delete`, `campaigns:read|create|update|send`.
 
 ## Don't

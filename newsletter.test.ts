@@ -17,6 +17,7 @@ import {
   campaignSends,
   campaigns,
   campaignsAdminResource,
+  cancelCampaign,
   confirmSubscription,
   confirmUrl,
   createCampaign,
@@ -26,6 +27,7 @@ import {
   NewsletterError,
   renderCampaign,
   resendSender,
+  sendBatchJob,
   sendCampaign,
   setNewsletterMessages,
   setNewsletterSender,
@@ -135,6 +137,35 @@ describe('campaigns', () => {
     expect(failed[0]!.error).toBe('mailbox full');
   });
 
+  it('"send now" on a scheduled campaign sends now (the scheduled job does not keep its old date)', async () => {
+    await activeSubscriber('now@site.test');
+    sent.length = 0;
+    const c = await createCampaign({ subject: 'Now', body: docFromText('x') });
+    await sendCampaign(c.id, new Date(Date.now() + 86_400_000));
+    await sendCampaign(c.id);
+    await runDue();
+    expect(sent.map((m) => m.to)).toEqual(['now@site.test']);
+    expect((await db.select().from(campaigns))[0]!.status).toBe('sent');
+  });
+
+  it('concurrent batch jobs never send twice to the same subscriber, and a cancel is not overwritten', async () => {
+    for (let i = 0; i < 20; i++) await db.insert(subscribers).values({ email: `p${i}@site.test`, status: 'active' });
+    setNewsletterSender({ name: 'slow', send: async (m) => void (await new Promise((r) => setTimeout(r, 2)), sent.push(m)) });
+    const c = await createCampaign({ subject: 'Race', body: docFromText('x') });
+    await sendCampaign(c.id);
+    await sendBatchJob.enqueue({ campaignId: c.id }, { dedupeKey: 'duplicate-chain' }); // p. ej. un reintento a destiempo
+    await Promise.all([runDue({ limit: 1 }), runDue({ limit: 1 })]);
+    expect(sent).toHaveLength(20);
+    expect(new Set(sent.map((m) => m.to)).size).toBe(20);
+    expect((await db.select().from(campaigns))[0]).toMatchObject({ status: 'sent', sentCount: 20 });
+
+    const c2 = await createCampaign({ subject: 'Stop', body: docFromText('x') });
+    setNewsletterSender({ name: 'cancelling', send: async () => void (await cancelCampaign(c2.id)) });
+    await sendCampaign(c2.id);
+    await runDue();
+    expect((await db.select().from(campaigns).where(eq(campaigns.id, c2.id)))[0]!.status).toBe('cancelled');
+  });
+
   it('admin: permissions, scheduling in the future, cancel', async () => {
     const admin = (perms: string[]): AdminContext => ({ user: { id: 'u', email: null, name: null }, can: async (p) => perms.includes(p) });
     const all = admin(['campaigns:create', 'campaigns:send', 'campaigns:read']);
@@ -167,14 +198,26 @@ describe('sender and routes', () => {
     expect(res.status).toBe(202);
     await runDue();
     const confirm = new URL(sent[0]!.text.match(/https:\/\/\S+/)![0]);
-    const c = await app.request(`${confirm.pathname}${confirm.search}`);
+    // GET (lo abre también un escáner de enlaces): solo una página con un botón que hace POST; no cambia nada.
+    const page = await app.request(`${confirm.pathname}${confirm.search}`);
+    expect([page.status, page.headers.get('content-type'), page.headers.get('referrer-policy')]).toEqual([200, 'text/html; charset=utf-8', 'no-referrer']);
+    const html0 = await page.text();
+    expect(html0).toContain(`<form method="post" action="?token=${encodeURIComponent(confirm.searchParams.get('token')!)}">`);
+    expect((await db.select().from(subscribers))[0]!.status).toBe('pending');
+    const pagePost = (path: string) => app.request(path, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'via=page' });
+    const c = await pagePost(`${confirm.pathname}${confirm.search}`);
     expect(c.headers.get('location')).toBe('/newsletter/confirmed');
+    expect((await db.select().from(subscribers))[0]!.status).toBe('active');
     const [s] = await db.select().from(subscribers);
     const unsub = new URL(await unsubscribeUrl(s!.id));
-    const one = await unsubscribeRoute(new Request(unsub, { method: 'POST', body: 'List-Unsubscribe=One-Click' }));
+    expect((await app.request(`${unsub.pathname}${unsub.search}`)).status).toBe(200);
+    expect((await db.select().from(subscribers))[0]!.status).toBe('active');
+    expect((await app.request('/newsletter/confirm?token=bad')).headers.get('location')).toBe('/newsletter/invalid');
+    const one = await unsubscribeRoute(new Request(unsub, { method: 'POST', body: new URLSearchParams({ 'List-Unsubscribe': 'One-Click' }) }));
     expect(one.status).toBe(200);
     expect((await db.select().from(subscribers))[0]!.status).toBe('unsubscribed');
     expect((await app.request('/newsletter/unsubscribe?token=bad')).headers.get('location')).toBe('/newsletter/invalid');
+    expect((await pagePost(`${unsub.pathname}${unsub.search}`)).headers.get('location')).toBe('/newsletter/unsubscribed');
     // Formulario HTML sin JavaScript: 303 de vuelta a la página con el resultado.
     const fd = new FormData();
     for (const [k, v] of Object.entries({ ...fields, email: 'html@site.test' })) fd.set(k, String(v));
