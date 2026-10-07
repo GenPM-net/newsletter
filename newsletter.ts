@@ -11,7 +11,7 @@ import { makeToken, readToken } from './tokens.ts';
 
 export class NewsletterError extends Error {
   constructor(
-    readonly code: 'invalid' | 'spam' | 'rate_limited' | 'not_found' | 'invalid_state' | 'invalid_token' | 'forbidden',
+    readonly code: 'invalid' | 'spam' | 'rate_limited' | 'not_found' | 'invalid_state' | 'invalid_token' | 'forbidden' | 'consent_required',
     message: string = code,
   ) {
     super(message);
@@ -220,7 +220,7 @@ export const sendBatchJob = defineJob(
       .where(
         and(
           eq(campaignSends.campaignId, campaignId),
-          sql`${campaignSends.subscriberId} in (select subscriber_id from newsletter_sends where campaign_id = ${campaignId} and (status = 'queued' or (status = 'sending' and claimed_at < ${stale})) limit ${BATCH_SIZE} for update skip locked)`,
+          sql`${campaignSends.subscriberId} in (select subscriber_id from newsletter_sends where campaign_id = ${campaignId} and (status = 'queued' or (status = 'sending' and claimed_at < ${stale.toISOString()}::timestamptz)) limit ${BATCH_SIZE} for update skip locked)`,
         ),
       )
       .returning({ subscriberId: campaignSends.subscriberId });

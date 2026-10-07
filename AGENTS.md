@@ -21,8 +21,11 @@ Tables: `subscribers`, `newsletter_campaigns`, `newsletter_sends`. No open-track
    need GET and POST: GET only renders a minimal page with a button (mail link scanners open every URL), the button
    POSTs and acts; any other POST to `unsubscribe` is the RFC 8058 one-click (200, no redirect). Translate the page
    with `texts` (`newsletterRoutes({ texts })` or the handlers' third argument).
-4. Sign-up form: `POST /newsletter/subscribe` with `email`, the @core/antispam fields and an unchecked consent checkbox
-   whose text version goes in `consentVersion`. Always show the same "check your inbox" message.
+4. Sign-up form: `POST /newsletter/subscribe` with `email`, the @core/antispam fields and an unchecked, required consent
+   checkbox `consent` whose text version goes in a hidden `consentVersion` (with `consentVersion`, the server rejects
+   the sign-up unless `consent` is checked: `consent_required`). Always show the same "check your inbox" message.
+   A plain HTML form posted from the same site (`Accept: text/html` and a same-host `Referer`, what browsers send) is
+   redirected back with `?newsletter=<status>#newsletter`; other clients get JSON (202, or 400/429 with `error`).
 5. Translate system emails with `setNewsletterMessages((locale) => ({ confirmSubject, confirmText, unsubscribeLabel }))`.
 6. Add `...newsletterAdminResources()` to `src/genpm/admin.ts`; wire the provider's bounce/complaint webhook to `markUndeliverable`.
 7. Verify: subscribe, open the confirmation link, send a campaign to yourself and unsubscribe with one click.

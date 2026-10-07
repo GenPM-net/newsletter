@@ -61,8 +61,11 @@ export async function handleSubscribe(req: Request, opts: { tags?: string[]; sou
   if (isJson) Object.assign(fields, await req.json().catch(() => ({})));
   else (await req.formData()).forEach((v, k) => typeof v === 'string' && (fields[k] = v));
   try {
+    // Un formulario que declara `consentVersion` (el texto de su casilla) solo vale con la casilla marcada.
+    const consentVersion = typeof fields.consentVersion === 'string' ? fields.consentVersion : undefined;
+    if (consentVersion && !['on', 'true', true].includes(fields.consent as string | boolean)) throw new NewsletterError('consent_required');
     await subscribe(
-      { email: String(fields.email ?? ''), tags: opts.tags, source: String(fields.source ?? opts.source ?? '') || undefined, locale: typeof fields.locale === 'string' ? fields.locale : undefined, consentVersion: typeof fields.consentVersion === 'string' ? fields.consentVersion : undefined },
+      { email: String(fields.email ?? ''), tags: opts.tags, source: String(fields.source ?? opts.source ?? '') || undefined, locale: typeof fields.locale === 'string' ? fields.locale : undefined, consentVersion },
       { headers: req.headers, fields },
     );
     // Misma respuesta para altas nuevas y existentes.
