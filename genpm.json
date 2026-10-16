@@ -1,7 +1,7 @@
 {
   "$": 1,
   "n": "@core/newsletter",
-  "v": "1.1.0",
+  "v": "1.1.1",
   "s": {
     "en": "Newsletter: double opt-in, one-click unsubscribe (RFC 8058), tags, rich-text campaigns sent in resumable batches",
     "es": "Newsletter: doble opt-in, baja en un clic (RFC 8058), etiquetas y campañas con texto enriquecido en lotes reanudables",
